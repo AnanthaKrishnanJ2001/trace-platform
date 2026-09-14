@@ -1,0 +1,79 @@
+name: trace
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-trace}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-trace}
+      POSTGRES_DB: ${POSTGRES_DB:-trace}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - trace_postgres_data:/var/lib/postgresql/data
+      - ../db/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-trace}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  orchestrator:
+    build:
+      context: ../../services/orchestrator
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-trace}
+      DB_USER: ${POSTGRES_USER:-trace}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-trace}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      AI_SERVICE_BASE_URL: http://engine:8000
+      INTERNAL_JWT_SECRET: ${INTERNAL_JWT_SECRET:-change-me-in-env}
+    ports:
+      - "8080:8080"
+
+  engine:
+    build:
+      context: ../../services/engine
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-trace}
+      DB_USER: ${POSTGRES_USER:-trace}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-trace}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      INTERNAL_JWT_SECRET: ${INTERNAL_JWT_SECRET:-change-me-in-env}
+      GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT:-}
+      VERTEX_AI_LOCATION: ${VERTEX_AI_LOCATION:-us-central1}
+    ports:
+      - "8000:8000"
+
+volumes:
+  trace_postgres_data:

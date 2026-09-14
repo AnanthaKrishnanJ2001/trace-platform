@@ -1,0 +1,82 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: trace-orchestrator
+
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:trace}
+    username: ${DB_USER:trace}
+    password: ${DB_PASSWORD:trace}
+    hikari:
+      maximum-pool-size: 10
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration,filesystem:../../infra/db/migrations
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+# Internal service-to-service auth (TDD §1.2 — JWT issued by Spring Boot Core,
+# audience-restricted to the FastAPI AI Service)
+trace:
+  security:
+    internal-jwt:
+      secret: ${INTERNAL_JWT_SECRET:change-me-in-env}
+      audience: fastapi-ai-service
+      ttl-seconds: 300
+  ai-service:
+    base-url: ${AI_SERVICE_BASE_URL:http://localhost:8000}
+
+# Resilience4j config for calls to the FastAPI AI Service (TDD §5.1)
+resilience4j:
+  circuitbreaker:
+    instances:
+      investigationService:
+        registerHealthIndicator: true
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 20
+        minimumNumberOfCalls: 5
+        failureRateThreshold: 50
+        waitDurationInOpenState: 30s
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+
+  timelimiter:
+    instances:
+      investigationService:
+        timeoutDuration: 8s
+        cancelRunningFuture: true
+
+  retry:
+    instances:
+      investigationService:
+        maxAttempts: 3
+        waitDuration: 500ms
+        enableExponentialBackoff: true
+        exponentialBackoffMultiplier: 2
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when-authorized
+
+logging:
+  level:
+    com.trace: INFO

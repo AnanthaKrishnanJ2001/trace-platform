@@ -1,0 +1,150 @@
+openapi: 3.0.3
+info:
+  title: TRACE Internal API
+  description: >
+    Spring Boot Core ↔ FastAPI AI Service contract (TDD §3.2). Backed by
+    backlog TASK-19 ("versioned, strictly-typed REST contract... verified by
+    a contract test run in CI") — both services should validate against this
+    spec, not against each other's implementation.
+  version: 0.1.0
+
+servers:
+  - url: http://localhost:8000/internal/v1
+
+paths:
+  /investigate:
+    post:
+      summary: Trigger a full multi-agent investigation
+      operationId: investigate
+      security:
+        - internalJwt: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvestigationRequest'
+      responses:
+        '200':
+          description: Investigation completed (or partially completed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvestigationResult'
+        '503':
+          description: AI service unavailable (circuit breaker open)
+          content:
+            application/json:
+              schema:
+                $ref: '../schemas/error-envelope.schema.json'
+        '504':
+          description: Investigation exceeded the configured timeout
+          content:
+            application/json:
+              schema:
+                $ref: '../schemas/error-envelope.schema.json'
+
+  /memory/write-back:
+    post:
+      summary: Persist a resolved incident into organizational memory
+      operationId: memoryWriteBack
+      security:
+        - internalJwt: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IncidentWriteBack'
+      responses:
+        '202':
+          description: Accepted for async embedding
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  incident_id:
+                    type: string
+                  embedding_status:
+                    type: string
+                    enum: [QUEUED, COMPLETE]
+
+components:
+  securitySchemes:
+    internalJwt:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    InvestigationRequest:
+      type: object
+      required: [investigation_id, exception_id, exception_type, references]
+      properties:
+        investigation_id:
+          type: string
+        exception_id:
+          type: string
+        exception_type:
+          type: string
+        references:
+          type: object
+          properties:
+            invoice_id:
+              type: string
+            po_id:
+              type: string
+            vendor_id:
+              type: string
+        context:
+          type: object
+          properties:
+            tolerance_pct:
+              type: number
+            confidence_threshold:
+              type: integer
+        callback_url:
+          type: string
+          nullable: true
+
+    InvestigationResult:
+      type: object
+      properties:
+        investigation_id:
+          type: string
+        status:
+          type: string
+          enum: [COMPLETED, PARTIAL, FAILED]
+        findings:
+          type: object
+        root_cause:
+          type: object
+        recommendation:
+          type: object
+        agent_trace:
+          type: array
+          items:
+            type: object
+
+    IncidentWriteBack:
+      type: object
+      required: [exception_id, root_cause, resolution, decision, evidence, outcome, resolved_at]
+      properties:
+        exception_id:
+          type: string
+        root_cause:
+          type: string
+        resolution:
+          type: string
+        decision:
+          type: string
+        evidence:
+          type: array
+          items:
+            type: string
+        outcome:
+          type: string
+        resolved_at:
+          type: string
+          format: date-time

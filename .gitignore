@@ -1,0 +1,71 @@
+# ============================================================
+# TRACE monorepo .gitignore
+# Covers: Java/Maven/Gradle (orchestrator), Python (engine),
+# Node (future frontend), Docker, IDEs, and OS artifacts.
+# ============================================================
+
+# ---------- Java / Maven ----------
+services/orchestrator/target/
+**/target/
+*.class
+*.jar
+!.mvn/wrapper/maven-wrapper.jar
+.mvn/timing.properties
+
+# ---------- Java / Gradle (in case the team switches from Maven) ----------
+.gradle/
+**/build/
+!src/**/build/
+gradle-app.setting
+!gradle-wrapper.jar
+
+# ---------- Python ----------
+services/engine/.venv/
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
+poetry.lock.bak
+
+# ---------- Environment / secrets ----------
+.env
+.env.*
+!.env.example
+!*.env.example
+
+# ---------- Node / future frontend ----------
+node_modules/
+.next/
+out/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---------- Docker ----------
+*.pid
+
+# ---------- IDEs ----------
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+*.code-workspace
+.project
+.classpath
+.settings/
+
+# ---------- OS ----------
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---------- Logs ----------
+*.log
+logs/
