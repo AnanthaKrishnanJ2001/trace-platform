@@ -1,3 +1,5 @@
+# trace-platform
+Transactional Root-cause Analysis &amp; Context Engine Technical Architecture Specification
 # TRACE — Transactional Root-cause Analysis & Context Engine
 
 Decoupled dual-service architecture: **Spring Boot Core** owns orchestration, persistence, and audit; the **FastAPI AI Service** hosts the multi-agent investigation engine. The two communicate only over a versioned internal REST contract — see [`docs/decisions/0001-repository-strategy.md`](docs/decisions/0001-repository-strategy.md) for why this lives in one repository, and `docs/architecture/` for the full technical design.
