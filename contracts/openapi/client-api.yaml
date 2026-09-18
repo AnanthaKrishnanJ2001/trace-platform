@@ -44,30 +44,40 @@ components:
         source_system:
           type: string
           maxLength: 50
+          description: Must match a registered upstream system code (TDD §3.3).
         event_type:
           type: string
         references:
           type: object
+          required: [invoice_id, po_id, vendor_id]
           properties:
             invoice_id:
               type: string
+              pattern: '^[A-Z]{2,4}-\d{4,8}$'
             po_id:
               type: string
+              pattern: '^[A-Z]{2,4}-\d{4,8}$'
             vendor_id:
               type: string
+              pattern: '^[A-Z]{2,4}-\d{4,8}$'
         raw_amount:
           type: number
           format: double
+          exclusiveMinimum: true
+          minimum: 0
+          description: Positive, max 2 decimal places.
         currency:
           type: string
           minLength: 3
           maxLength: 3
+          description: ISO 4217 3-letter code.
         event_timestamp:
           type: string
           format: date-time
 
     Exception:
       type: object
+      required: [exception_id, status, created_at, links]
       properties:
         exception_id:
           type: string
@@ -76,9 +86,21 @@ components:
           enum: [DETECTED, INVESTIGATING, INVESTIGATED, NEEDS_HUMAN_REVIEW, RESOLVED, REJECTED, INVESTIGATION_UNAVAILABLE]
         type:
           type: string
+          nullable: true
+          description: Set by classification (TASK-02); absent/null at ingestion time.
         severity:
           type: string
           enum: [LOW, MEDIUM, HIGH, CRITICAL]
+          nullable: true
+          description: Set by classification (TASK-02); absent/null at ingestion time.
         created_at:
           type: string
           format: date-time
+        links:
+          type: object
+          required: [self, investigation]
+          properties:
+            self:
+              type: string
+            investigation:
+              type: string
