@@ -39,6 +39,12 @@ trace:
       ttl-seconds: 300
   ai-service:
     base-url: ${AI_SERVICE_BASE_URL:http://localhost:8000}
+  # Allow-list backing @RegisteredUpstreamSystem (TDD §3.3). Placeholder —
+  # seeded with only the one code that appears anywhere in the spec; see the
+  # gap noted on RegisteredUpstreamSystem.
+  upstream-systems:
+    codes:
+      - SAP_AP_MODULE
 
 # Resilience4j config for calls to the FastAPI AI Service (TDD §5.1)
 resilience4j:
