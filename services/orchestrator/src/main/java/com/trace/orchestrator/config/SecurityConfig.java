@@ -1,5 +1,6 @@
 package com.trace.orchestrator.config;
 
+import com.trace.orchestrator.constant.ApiConstants;
 import java.util.List;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -38,6 +39,8 @@ public class SecurityConfig {
         configuration.setAllowedOriginPatterns(List.of("*"));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
+        // Custom response headers are hidden from browser JS unless exposed.
+        configuration.setExposedHeaders(List.of(ApiConstants.IDEMPOTENT_REPLAYED_HEADER));
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);

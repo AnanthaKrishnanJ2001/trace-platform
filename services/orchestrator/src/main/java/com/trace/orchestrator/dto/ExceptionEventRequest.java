@@ -1,6 +1,7 @@
 package com.trace.orchestrator.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.trace.orchestrator.constant.ApiConstants;
 import com.trace.orchestrator.dto.validation.RegisteredUpstreamSystem;
 import com.trace.orchestrator.dto.validation.ValidCurrency;
 import jakarta.validation.Valid;
@@ -14,7 +15,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 
 /**
- * Request body for {@code POST /api/v1/exceptions} — must match
+ * Request body for {@code POST /api/v1/exceptions/create} — must match
  * {@code ExceptionEvent} in {@code contracts/openapi/client-api.yaml}
  * exactly (TDD §3.1, §3.3).
  */
@@ -101,20 +102,18 @@ public class ExceptionEventRequest {
     /** The invoice/PO/vendor identifiers this exception event is about. */
     public static class References {
 
-        private static final String ID_PATTERN = "^[A-Z]{2,4}-\\d{4,8}$";
-
         @NotBlank
-        @Pattern(regexp = ID_PATTERN)
+        @Pattern(regexp = ApiConstants.ID_PATTERN)
         @JsonProperty("invoice_id")
         private String invoiceId;
 
         @NotBlank
-        @Pattern(regexp = ID_PATTERN)
+        @Pattern(regexp = ApiConstants.ID_PATTERN)
         @JsonProperty("po_id")
         private String poId;
 
         @NotBlank
-        @Pattern(regexp = ID_PATTERN)
+        @Pattern(regexp = ApiConstants.ID_PATTERN)
         @JsonProperty("vendor_id")
         private String vendorId;
 
