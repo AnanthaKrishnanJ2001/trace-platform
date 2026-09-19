@@ -5,13 +5,14 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import java.time.Instant;
 
 /**
- * Response body for {@code POST /api/v1/exceptions} — must match the
+ * Response body for {@code POST /api/v1/exceptions/create} — must match the
  * {@code Exception} schema in {@code contracts/openapi/client-api.yaml}
  * exactly (TDD §3.1).
  *
- * <p>{@code type}/{@code severity} are omitted (not {@code null}-serialized)
- * at this stage — TASK-01 is ingestion-only; TASK-02 (classification) is what
- * populates them.
+ * <p>{@code type}/{@code severity} are always populated on a successful
+ * ingestion (TASK-02's classifier runs synchronously before this response is
+ * built) — {@code @JsonInclude(NON_NULL)} is kept defensively rather than
+ * relied on, in case a future producer of this DTO doesn't classify.
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class ExceptionResponse {

@@ -11,10 +11,25 @@ servers:
   - url: http://localhost:8080/api/v1
 
 paths:
-  /exceptions:
+  /exceptions/create:
     post:
       summary: Ingest a new exception
+      description: >
+        Optionally idempotent: send an `Idempotency-Key` header and a retry
+        of the same request within the key's TTL (10 minutes) returns the
+        original 201 response instead of creating a second exception (TDD
+        §4.2). Without the header, every call creates a new exception.
       operationId: createException
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          description: >
+            Client-generated unique key (e.g. a UUID) identifying this
+            logical request. 1-128 characters from A-Z a-z 0-9 . _ : -
+          schema:
+            type: string
+            pattern: '^[A-Za-z0-9._:-]{1,128}$'
       requestBody:
         required: true
         content:
@@ -23,13 +38,39 @@ paths:
               $ref: '#/components/schemas/ExceptionEvent'
       responses:
         '201':
-          description: Exception created
+          description: >
+            Exception created — or, when `Idempotency-Key` matches an
+            earlier completed request, that request's original response
+            replayed (marked by `Idempotent-Replayed: true`).
+          headers:
+            Idempotent-Replayed:
+              description: Present with value `true` only when this response is a replay.
+              schema:
+                type: string
+                enum: ['true']
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Exception'
         '400':
-          description: Validation failed
+          description: Validation failed, or `Idempotency-Key` is malformed
+          content:
+            application/json:
+              schema:
+                $ref: '../schemas/error-envelope.schema.json'
+        '409':
+          description: >
+            A request with the same `Idempotency-Key` is still being
+            processed (`REQUEST_IN_PROGRESS`). Retry shortly.
+          content:
+            application/json:
+              schema:
+                $ref: '../schemas/error-envelope.schema.json'
+        '422':
+          description: >
+            Referenced invoice or purchase order does not exist
+            (`UNPROCESSABLE_REFERENCE`), or `Idempotency-Key` was already
+            used with a different request body (`IDEMPOTENCY_KEY_REUSED`).
           content:
             application/json:
               schema:
@@ -87,12 +128,19 @@ components:
         type:
           type: string
           nullable: true
-          description: Set by classification (TASK-02); absent/null at ingestion time.
+          description: >
+            Set synchronously at ingestion by the rule-based classifier
+            (TASK-02) — always populated on a successful 201. Nullable only
+            because no other producer of this schema (e.g. a future
+            AI-classified type) is guaranteed to set it.
         severity:
           type: string
           enum: [LOW, MEDIUM, HIGH, CRITICAL]
           nullable: true
-          description: Set by classification (TASK-02); absent/null at ingestion time.
+          description: >
+            Set synchronously at ingestion by the rule-based classifier
+            (TASK-02) — always populated on a successful 201. Nullable only
+            because no other producer of this schema is guaranteed to set it.
         created_at:
           type: string
           format: date-time

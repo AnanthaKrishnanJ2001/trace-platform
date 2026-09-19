@@ -45,6 +45,25 @@ trace:
   upstream-systems:
     codes:
       - SAP_AP_MODULE
+  # Idempotency guard for POST /api/v1/exceptions/create (TDD §4.2). A key is
+  # held for `ttl` once its request completes; `in-progress-ttl` is shorter so
+  # a crash mid-request only blocks retries briefly.
+  idempotency:
+    key-prefix: "idem:"
+    ttl: 10m
+    in-progress-ttl: 30s
+  # Deviation-percentage thresholds for ExceptionClassifier (TASK-02 AC).
+  # Each *-max-pct is the exclusive upper bound of its band — a deviation AT
+  # the threshold falls into the next, more severe band:
+  #   LOW    < low-max-pct
+  #   MEDIUM >= low-max-pct    and < medium-max-pct
+  #   HIGH   >= medium-max-pct and < high-max-pct
+  #   CRITICAL >= high-max-pct
+  classification:
+    severity-bands:
+      low-max-pct: 5.0
+      medium-max-pct: 15.0
+      high-max-pct: 30.0
 
 # Resilience4j config for calls to the FastAPI AI Service (TDD §5.1)
 resilience4j:

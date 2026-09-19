@@ -1,5 +1,6 @@
 package com.trace.orchestrator.security;
 
+import com.trace.orchestrator.constant.ApiConstants;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -23,21 +24,17 @@ import org.springframework.web.filter.OncePerRequestFilter;
 @Order(1)
 public class TraceIdFilter extends OncePerRequestFilter {
 
-    public static final String TRACE_ID_ATTRIBUTE = "traceId";
-    public static final String TRACE_ID_HEADER = "X-Trace-Id";
-    private static final String MDC_KEY = "traceId";
-
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
         String traceId = UUID.randomUUID().toString();
-        request.setAttribute(TRACE_ID_ATTRIBUTE, traceId);
-        response.setHeader(TRACE_ID_HEADER, traceId);
-        MDC.put(MDC_KEY, traceId);
+        request.setAttribute(ApiConstants.TRACE_ID_ATTRIBUTE, traceId);
+        response.setHeader(ApiConstants.TRACE_ID_HEADER, traceId);
+        MDC.put(ApiConstants.TRACE_ID_MDC_KEY, traceId);
         try {
             chain.doFilter(request, response);
         } finally {
-            MDC.remove(MDC_KEY);
+            MDC.remove(ApiConstants.TRACE_ID_MDC_KEY);
         }
     }
 }
