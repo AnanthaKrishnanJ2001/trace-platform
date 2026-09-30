@@ -10,7 +10,7 @@ WORKDIR /app
 RUN pip install --no-cache-dir poetry==1.8.3
 
 # Leverage layer caching: resolve dependencies before copying source
-COPY pyproject.toml ./
+COPY pyproject.toml poetry.lock ./
 RUN poetry install --no-root --only main
 
 COPY app ./app
