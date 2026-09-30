@@ -6,7 +6,12 @@ info:
     backlog TASK-19 ("versioned, strictly-typed REST contract... verified by
     a contract test run in CI") — both services should validate against this
     spec, not against each other's implementation.
-  version: 0.1.0
+
+
+    Every call carries the internal JWT (audience `fastapi-ai-service`) as a
+    bearer token and the gateway-generated `X-Trace-Id` header. Every 4xx/5xx
+    uses the standard error envelope.
+  version: 0.2.0
 
 servers:
   - url: http://localhost:8000/internal/v1
@@ -15,9 +20,17 @@ paths:
   /investigate:
     post:
       summary: Trigger a full multi-agent investigation
+      description: >
+        Runs the Investigation, Policy and Memory agents and synthesizes a
+        root cause and recommendation. Must finish inside the caller's 8s
+        time limit (TDD §5.4); when one agent cannot finish in time its
+        section of `findings` is returned with `status: INCOMPLETE` and the
+        overall `status` is `PARTIAL` instead of failing the whole call.
       operationId: investigate
       security:
         - internalJwt: []
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
       requestBody:
         required: true
         content:
@@ -27,10 +40,19 @@ paths:
       responses:
         '200':
           description: Investigation completed (or partially completed)
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/TraceId'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/InvestigationResult'
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
         '503':
           description: AI service unavailable (circuit breaker open)
           content:
@@ -50,6 +72,8 @@ paths:
       operationId: memoryWriteBack
       security:
         - internalJwt: []
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
       requestBody:
         required: true
         content:
@@ -59,16 +83,19 @@ paths:
       responses:
         '202':
           description: Accepted for async embedding
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/TraceId'
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  incident_id:
-                    type: string
-                  embedding_status:
-                    type: string
-                    enum: [QUEUED, COMPLETE]
+                $ref: '#/components/schemas/IncidentWriteBackAccepted'
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
 
 components:
   securitySchemes:
@@ -76,8 +103,59 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+      description: >
+        HS256-signed JWT issued by Spring Boot Core, `aud` =
+        `fastapi-ai-service`. Missing, expired, badly signed or
+        wrong-audience tokens are all rejected with 401.
+
+  parameters:
+    TraceId:
+      name: X-Trace-Id
+      in: header
+      required: true
+      description: >
+        Generated once at the Spring Boot Core gateway; the engine reuses it
+        as-is in logs and error envelopes and never regenerates it.
+      schema:
+        type: string
+
+  headers:
+    TraceId:
+      description: Echo of the request's X-Trace-Id.
+      schema:
+        type: string
+
+  responses:
+    ValidationFailed:
+      description: Payload failed schema validation (`error` = VALIDATION_FAILED)
+      content:
+        application/json:
+          schema:
+            $ref: '../schemas/error-envelope.schema.json'
+    Unauthorized:
+      description: Missing or invalid internal JWT (`error` = UNAUTHORIZED)
+      content:
+        application/json:
+          schema:
+            $ref: '../schemas/error-envelope.schema.json'
+    InternalError:
+      description: Unhandled failure inside the engine (`error` = INTERNAL_ERROR)
+      content:
+        application/json:
+          schema:
+            $ref: '../schemas/error-envelope.schema.json'
 
   schemas:
+    References:
+      type: object
+      properties:
+        invoice_id:
+          type: string
+        po_id:
+          type: string
+        vendor_id:
+          type: string
+
     InvestigationRequest:
       type: object
       required: [investigation_id, exception_id, exception_type, references]
@@ -89,27 +167,24 @@ components:
         exception_type:
           type: string
         references:
-          type: object
-          properties:
-            invoice_id:
-              type: string
-            po_id:
-              type: string
-            vendor_id:
-              type: string
+          $ref: '#/components/schemas/References'
         context:
           type: object
           properties:
             tolerance_pct:
               type: number
+              minimum: 0
             confidence_threshold:
               type: integer
+              minimum: 0
+              maximum: 100
         callback_url:
           type: string
           nullable: true
 
     InvestigationResult:
       type: object
+      required: [investigation_id, status, findings, agent_trace]
       properties:
         investigation_id:
           type: string
@@ -117,15 +192,160 @@ components:
           type: string
           enum: [COMPLETED, PARTIAL, FAILED]
         findings:
-          type: object
+          $ref: '#/components/schemas/Findings'
         root_cause:
-          type: object
+          $ref: '#/components/schemas/RootCause'
         recommendation:
-          type: object
+          $ref: '#/components/schemas/Recommendation'
         agent_trace:
           type: array
           items:
-            type: object
+            $ref: '#/components/schemas/AgentTraceStep'
+
+    SectionStatus:
+      type: string
+      enum: [OK, INCOMPLETE]
+      default: OK
+      description: >
+        INCOMPLETE means the agent hit its timeout/retry budget (TDD §5.4);
+        the section's other fields are then absent and `reason` explains why.
+
+    Findings:
+      type: object
+      properties:
+        investigation_agent:
+          $ref: '#/components/schemas/InvestigationAgentFindings'
+        policy_agent:
+          $ref: '#/components/schemas/PolicyAgentFindings'
+        memory_agent:
+          $ref: '#/components/schemas/MemoryAgentFindings'
+
+    InvestigationAgentFindings:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/SectionStatus'
+        reason:
+          type: string
+        invoice_amount:
+          type: number
+        po_amount:
+          type: number
+        difference:
+          type: number
+        tools_called:
+          type: array
+          items:
+            type: string
+
+    PolicyAgentFindings:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/SectionStatus'
+        reason:
+          type: string
+        violated:
+          type: boolean
+        policy_document:
+          type: string
+        clause_id:
+          type: string
+        clause_text:
+          type: string
+
+    MemoryAgentFindings:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/SectionStatus'
+        reason:
+          type: string
+        matches_found:
+          type: integer
+          minimum: 0
+        top_match:
+          type: object
+          nullable: true
+          required: [incident_id, similarity, resolution, outcome]
+          properties:
+            incident_id:
+              type: string
+            similarity:
+              type: number
+              minimum: 0
+              maximum: 1
+            resolution:
+              type: string
+            outcome:
+              type: string
+
+    Evidence:
+      type: object
+      required: [source, field, value]
+      properties:
+        source:
+          type: string
+        field:
+          type: string
+        value:
+          oneOf:
+            - type: number
+            - type: string
+
+    RootCause:
+      type: object
+      nullable: true
+      description: Absent or null when the engine could not determine one (PARTIAL/FAILED).
+      required: [label, confidence, evidence]
+      properties:
+        label:
+          type: string
+        confidence:
+          type: integer
+          minimum: 0
+          maximum: 100
+        evidence:
+          type: array
+          items:
+            $ref: '#/components/schemas/Evidence'
+
+    Recommendation:
+      type: object
+      nullable: true
+      description: Absent or null when no root cause could be determined.
+      required: [action_type, reason, requires_approval]
+      properties:
+        action_type:
+          type: string
+          example: REQUEST_CORRECTED_INVOICE
+        reason:
+          type: string
+        requires_approval:
+          type: boolean
+
+    AgentTraceStep:
+      type: object
+      required: [agent, step, timestamp]
+      description: >
+        One row for Spring Boot Core's `agent_traces` table (`tool` →
+        `tool_name`, `timestamp` → `occurred_at`).
+      properties:
+        agent:
+          type: string
+          enum: [orchestrator, investigation, policy, memory, action]
+        step:
+          type: string
+          description: e.g. PLAN, TOOL_CALL, AGGREGATE
+        tool:
+          type: string
+        tool_input:
+          type: object
+        tool_output:
+          type: object
+        timestamp:
+          type: string
+          format: date-time
 
     IncidentWriteBack:
       type: object
@@ -148,3 +368,13 @@ components:
         resolved_at:
           type: string
           format: date-time
+
+    IncidentWriteBackAccepted:
+      type: object
+      required: [incident_id, embedding_status]
+      properties:
+        incident_id:
+          type: string
+        embedding_status:
+          type: string
+          enum: [QUEUED, COMPLETE]

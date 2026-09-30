@@ -71,6 +71,9 @@ services:
       INTERNAL_JWT_SECRET: ${INTERNAL_JWT_SECRET:-change-me-in-env}
       GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT:-}
       VERTEX_AI_LOCATION: ${VERTEX_AI_LOCATION:-us-central1}
+      # Gemini API key from infra/docker/.env (never committed). The engine
+      # refuses to start if this is empty.
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
     ports:
       - "8000:8000"
 
