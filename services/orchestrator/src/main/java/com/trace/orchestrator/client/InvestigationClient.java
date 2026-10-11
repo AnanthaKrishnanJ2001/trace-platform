@@ -73,7 +73,7 @@ public class InvestigationClient {
         try {
             return guarded.get();
         } catch (CallNotPermittedException ex) {
-            throw new InvestigationUnavailableException("AI service circuit breaker is open", ex);
+            throw new InvestigationUnavailableException("AI service circuit breaker is open.", ex);
         } catch (RestClientException ex) {
             throw new InvestigationUnavailableException("AI service call failed: " + ex.getMessage(), ex);
         }
