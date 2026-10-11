@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -24,6 +25,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 /**
  * Mockito unit tests for {@link ExceptionService}'s TASK-02 additions:
@@ -43,12 +45,15 @@ class ExceptionServiceTest {
     @Mock
     private PurchaseOrderRepository purchaseOrderRepository;
 
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
+
     private final ExceptionClassifier exceptionClassifier = new ExceptionClassifier(new SeverityBandsProperties());
 
     @Test
     void ingest_classifiesFromLinkedInvoiceAndPo_andPersistsClassifiedRow() {
         ExceptionService service = new ExceptionService(exceptionRepository, invoiceRepository,
-                purchaseOrderRepository, exceptionClassifier);
+                purchaseOrderRepository, exceptionClassifier, eventPublisher);
 
         ExceptionEventRequest request = validRequest();
         when(invoiceRepository.findById("INV-10492")).thenReturn(Optional.of(
@@ -67,12 +72,14 @@ class ExceptionServiceTest {
         // (52000 - 45000) / 45000 * 100 = 15.5555...% -> HIGH band (>=15, <30)
         assertThat(response.getSeverity()).isEqualTo("HIGH");
         verify(exceptionRepository).save(any());
+        // Investigation is triggered off this event after commit; no MDC in a unit test, so no trace id.
+        verify(eventPublisher).publishEvent(new ExceptionClassifiedEvent("EXC-88231", "HIGH", null));
     }
 
     @Test
     void ingest_whenInvoiceNotFound_throwsAndNeverPersists() {
         ExceptionService service = new ExceptionService(exceptionRepository, invoiceRepository,
-                purchaseOrderRepository, exceptionClassifier);
+                purchaseOrderRepository, exceptionClassifier, eventPublisher);
 
         ExceptionEventRequest request = validRequest();
         when(invoiceRepository.findById("INV-10492")).thenReturn(Optional.empty());
@@ -82,12 +89,13 @@ class ExceptionServiceTest {
                 .hasMessageContaining("INV-10492");
 
         verify(exceptionRepository, never()).save(any());
+        verifyNoInteractions(eventPublisher);
     }
 
     @Test
     void ingest_whenPurchaseOrderNotFound_throwsAndNeverPersists() {
         ExceptionService service = new ExceptionService(exceptionRepository, invoiceRepository,
-                purchaseOrderRepository, exceptionClassifier);
+                purchaseOrderRepository, exceptionClassifier, eventPublisher);
 
         ExceptionEventRequest request = validRequest();
         when(invoiceRepository.findById("INV-10492")).thenReturn(Optional.of(

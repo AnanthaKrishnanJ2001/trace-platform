@@ -47,7 +47,7 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       AI_SERVICE_BASE_URL: http://engine:8000
-      INTERNAL_JWT_SECRET: ${INTERNAL_JWT_SECRET:-change-me-in-env}
+      INTERNAL_JWT_SECRET: ${INTERNAL_JWT_SECRET:-change-me-in-env-at-least-32-bytes-long}
     ports:
       - "8080:8080"
 
@@ -68,7 +68,7 @@ services:
       DB_PASSWORD: ${POSTGRES_PASSWORD:-trace}
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      INTERNAL_JWT_SECRET: ${INTERNAL_JWT_SECRET:-change-me-in-env}
+      INTERNAL_JWT_SECRET: ${INTERNAL_JWT_SECRET:-change-me-in-env-at-least-32-bytes-long}
       GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT:-}
       VERTEX_AI_LOCATION: ${VERTEX_AI_LOCATION:-us-central1}
     ports:
