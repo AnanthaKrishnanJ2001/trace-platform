@@ -1,6 +1,7 @@
 package com.trace.orchestrator.constant;
 
 import java.math.BigDecimal;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
@@ -39,4 +40,43 @@ public final class ServiceConstants {
 
     /** Attempts to claim a key that expires between the failed SET NX and the follow-up GET. */
     public static final int MAX_CLAIM_ATTEMPTS = 2;
+
+    // ---- Exception lifecycle statuses (TDD §3.3) ---------------------------
+
+    public static final String STATUS_INVESTIGATING = "INVESTIGATING";
+    public static final String STATUS_INVESTIGATED = "INVESTIGATED";
+    public static final String STATUS_NEEDS_HUMAN_REVIEW = "NEEDS_HUMAN_REVIEW";
+    public static final String STATUS_INVESTIGATION_UNAVAILABLE = "INVESTIGATION_UNAVAILABLE";
+
+    // ---- InvestigationService / InvestigationTrigger ------------------------
+
+    /** Only these severities are investigated automatically (US-01); LOW/MEDIUM stay DETECTED. */
+    public static final Set<String> AUTO_INVESTIGATE_SEVERITIES = Set.of(SEVERITY_HIGH, SEVERITY_CRITICAL);
+
+    public static final String INVESTIGATION_ID_PREFIX = "INVST-";
+
+    /** Bean name of the bounded pool that runs investigations off the request thread. */
+    public static final String INVESTIGATION_EXECUTOR_BEAN = "investigationExecutor";
+
+    /** {@code InvestigationResult.status} value meaning the Engine produced nothing usable. */
+    public static final String INVESTIGATION_RESULT_FAILED = "FAILED";
+
+    /** Column width of {@code exceptions.root_cause_label}. */
+    public static final int ROOT_CAUSE_LABEL_MAX_LENGTH = 80;
+
+    /** Bounds of the {@code exceptions.root_cause_confidence} CHECK constraint. */
+    public static final int MIN_CONFIDENCE = 0;
+    public static final int MAX_CONFIDENCE = 100;
+
+    // ---- InvestigationClient -------------------------------------------------
+
+    /** Name of the Resilience4j instance (circuit breaker, retry, time limiter) in application.yml. */
+    public static final String INVESTIGATION_RESILIENCE_INSTANCE = "investigationService";
+
+    // ---- InternalJwtIssuer ---------------------------------------------------
+
+    public static final String INTERNAL_JWT_ISSUER = "trace-orchestrator";
+
+    /** HS256 needs a key of at least 256 bits. */
+    public static final int MIN_INTERNAL_JWT_SECRET_BYTES = 32;
 }

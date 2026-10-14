@@ -34,11 +34,13 @@ spring:
 trace:
   security:
     internal-jwt:
-      secret: ${INTERNAL_JWT_SECRET:change-me-in-env}
+      secret: ${INTERNAL_JWT_SECRET:change-me-in-env-at-least-32-bytes-long}
       audience: fastapi-ai-service
       ttl-seconds: 300
   ai-service:
     base-url: ${AI_SERVICE_BASE_URL:http://localhost:8000}
+    # TCP connect only; the read timeout is the investigationService time limiter (resilience4j.timelimiter).
+    connect-timeout: 2s
   # Allow-list backing @RegisteredUpstreamSystem (TDD §3.3). Placeholder —
   # seeded with only the one code that appears anywhere in the spec; see the
   # gap noted on RegisteredUpstreamSystem.
@@ -52,6 +54,19 @@ trace:
     key-prefix: "idem:"
     ttl: 10m
     in-progress-ttl: 30s
+  # Automatic investigation of HIGH/CRITICAL exceptions (US-01). A worker pool
+  # runs the AI-service call off the request thread; the sweeper re-dispatches
+  # exceptions the after-commit trigger missed and fails ones stuck INVESTIGATING
+  # (stale-after must comfortably exceed the 8s call budget incl. retries).
+  investigation:
+    confidence-threshold: 70
+    executor-core-size: 2
+    executor-max-size: 4
+    executor-queue-capacity: 50
+    sweep-interval: 30s
+    sweep-grace: 30s
+    stale-after: 2m
+    sweep-batch-size: 25
   # Deviation-percentage thresholds for ExceptionClassifier (TASK-02 AC).
   # Each *-max-pct is the exclusive upper bound of its band — a deviation AT
   # the threshold falls into the next, more severe band:
@@ -92,6 +107,11 @@ resilience4j:
         waitDuration: 500ms
         enableExponentialBackoff: true
         exponentialBackoffMultiplier: 2
+        # Retrying can't help either of these: an open breaker rejects instantly,
+        # and a 4xx means our request (or credentials) is wrong.
+        ignoreExceptions:
+          - io.github.resilience4j.circuitbreaker.CallNotPermittedException
+          - org.springframework.web.client.HttpClientErrorException
 
 management:
   endpoints:

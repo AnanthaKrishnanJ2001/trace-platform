@@ -15,6 +15,8 @@ import com.trace.orchestrator.service.ExceptionClassifier.ClassificationResult;
 import java.time.Instant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,15 +26,14 @@ import org.springframework.transaction.annotation.Transactional;
  * TASK-01 + TASK-02). Classification runs synchronously, in the same
  * transaction as ingestion — the client-facing contract (TDD §3.1) returns
  * {@code type}/{@code severity} in the same 201 response that creates the
- * exception, so there's no separate async step or listener here.
+ * exception.
  *
- * <p>Root-cause investigation (EPIC-2 — calling {@code POST /internal/v1/investigate})
- * is out of scope: that's TASK-03's Orchestrator Agent, which doesn't exist
- * yet. This method leaves the persisted row at {@code status=DETECTED},
- * which per the TDD's sequence (§2, steps 2-3) is exactly the state a
- * classified-but-not-yet-investigated exception is queued in; TASK-03 is
- * expected to pick up {@code DETECTED} exceptions and drive them through
- * {@code INVESTIGATING} itself. No separate queue/event is invented here.
+ * <p>This method persists the row at {@code status=DETECTED} and publishes an
+ * {@link ExceptionClassifiedEvent}. It does <em>not</em> investigate:
+ * {@link InvestigationTrigger} receives the event only after this
+ * transaction commits and starts the investigation on a background worker
+ * for HIGH/CRITICAL exceptions (US-01), so the caller's response never waits
+ * on the AI service. {@link InvestigationSweeper} covers any that are missed.
  */
 @Service
 public class ExceptionService {
@@ -43,13 +44,16 @@ public class ExceptionService {
     private final InvoiceRepository invoiceRepository;
     private final PurchaseOrderRepository purchaseOrderRepository;
     private final ExceptionClassifier exceptionClassifier;
+    private final ApplicationEventPublisher eventPublisher;
 
     public ExceptionService(ExceptionRepository exceptionRepository, InvoiceRepository invoiceRepository,
-            PurchaseOrderRepository purchaseOrderRepository, ExceptionClassifier exceptionClassifier) {
+            PurchaseOrderRepository purchaseOrderRepository, ExceptionClassifier exceptionClassifier,
+            ApplicationEventPublisher eventPublisher) {
         this.exceptionRepository = exceptionRepository;
         this.invoiceRepository = invoiceRepository;
         this.purchaseOrderRepository = purchaseOrderRepository;
         this.exceptionClassifier = exceptionClassifier;
+        this.eventPublisher = eventPublisher;
     }
 
     /**
@@ -109,6 +113,11 @@ public class ExceptionService {
         log.info("Persisted exception {} with status={}, type={}, severity={} (deviation={}%) for source_system={}",
                 exceptionId, ServiceConstants.STATUS_DETECTED, classification.type(), classification.severity(),
                 classification.deviationPct(), request.getSourceSystem());
+
+        // Delivered only after this transaction commits (see InvestigationTrigger). The trace id is captured
+        // here because the request-scoped MDC doesn't follow the investigation to its worker thread.
+        eventPublisher.publishEvent(new ExceptionClassifiedEvent(exceptionId, classification.severity(),
+                MDC.get(ApiConstants.TRACE_ID_MDC_KEY)));
 
         return toResponse(entity);
     }

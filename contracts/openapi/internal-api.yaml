@@ -120,6 +120,23 @@ components:
           type: object
         root_cause:
           type: object
+          description: >
+            Root Cause Engine output (US-03). Spring Boot Core persists
+            root_cause_label and confidence on the exception and flags it
+            NEEDS_HUMAN_REVIEW when confidence is below the threshold it sent
+            in the request's context.confidence_threshold.
+          properties:
+            root_cause_label:
+              type: string
+              maxLength: 80
+            confidence:
+              type: integer
+              minimum: 0
+              maximum: 100
+            evidence:
+              type: array
+              items:
+                type: string
         recommendation:
           type: object
         agent_trace:
